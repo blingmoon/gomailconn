@@ -526,7 +526,11 @@ func (c *Client) streamFetchEmail(ctx context.Context, cl *imapclient.Client, ui
 		Flags:       true,
 	}
 	fetchCmd := cl.Fetch(fetchSet, fetchOptions)
-	defer fetchCmd.Close()
+	defer func() {
+		if closeErr := fetchCmd.Close(); closeErr != nil {
+			log.Printf("streamFetchEmail: close fetch command failed: %v, uid: %v", closeErr, uids)
+		}
+	}()
 	maxUID := uint32(0)
 	for {
 		mailMessage := fetchCmd.Next()

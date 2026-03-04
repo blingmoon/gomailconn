@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/tls"
 	"fmt"
+	"log"
 	"net"
 	"net/smtp"
 	"strconv"
@@ -35,7 +36,11 @@ func (c *Client) Send(ctx context.Context, msg *SendMailMessage) error {
 	if err != nil {
 		return err
 	}
-	defer client.Close()
+	defer func() {
+		if closeErr := client.Close(); closeErr != nil {
+			log.Printf("Send: close smtp client failed: %v", closeErr)
+		}
+	}()
 
 	// Build message with go-message/mail: RFC-compliant headers via textproto (folding, encoded-words, address list format).
 	var h mail.Header
@@ -116,7 +121,9 @@ func (c *Client) dialSMTP() (*smtp.Client, error) {
 		}
 		client, newClientErr := smtp.NewClient(conn, host)
 		if newClientErr != nil {
-			conn.Close()
+			if closeErr := conn.Close(); closeErr != nil {
+				log.Printf("dialSMTP: close net.Conn failed: %v, addr: %s", closeErr, addr)
+			}
 			return nil, fmt.Errorf("smtp new client: %w", newClientErr)
 		}
 		return client, nil
@@ -129,11 +136,15 @@ func (c *Client) dialSMTP() (*smtp.Client, error) {
 	}
 	client, err := smtp.NewClient(conn, host)
 	if err != nil {
-		conn.Close()
+		if closeErr := conn.Close(); closeErr != nil {
+			log.Printf("dialSMTP: close net.Conn failed: %v, addr: %s", closeErr, addr)
+		}
 		return nil, fmt.Errorf("smtp new client: %w", err)
 	}
 	if err = client.StartTLS(&tls.Config{ServerName: host}); err != nil {
-		conn.Close()
+		if closeErr := conn.Close(); closeErr != nil {
+			log.Printf("dialSMTP: close net.Conn failed: %v, addr: %s", closeErr, addr)
+		}
 		return nil, fmt.Errorf("smtp start tls: %w", err)
 	}
 	return client, nil

@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"mime"
 	"os"
 	"path/filepath"
@@ -45,7 +46,11 @@ func (c *Client) extractEmailBodyAndAttachments(bodyReader imap.LiteralReader) (
 	if err != nil {
 		return nil, nil, err
 	}
-	defer mr.Close()
+	defer func() {
+		if closeErr := mr.Close(); closeErr != nil {
+			log.Printf("extractEmailBodyAndAttachments: close mail reader failed: %v", closeErr)
+		}
+	}()
 
 	var bodyParts []*MailBodyPart
 	var attachments []*MailAttachment
@@ -53,14 +58,6 @@ func (c *Client) extractEmailBodyAndAttachments(bodyReader imap.LiteralReader) (
 	saveDir := strings.TrimSpace(c.config.AttachmentDir)
 
 	for {
-		if attachmentTotalRemainingSize != nil && *attachmentTotalRemainingSize <= 0 {
-			// if attachment limit is exceeded, skip the attachment
-			break
-		}
-		if bodyTotalRemainingSize != nil && *bodyTotalRemainingSize <= 0 {
-			// if body limit is exceeded, skip the body
-			break
-		}
 		p, err := mr.NextPart()
 		if err == io.EOF {
 			break
@@ -255,7 +252,11 @@ func (c *Client) saveAttachmentToLocal(filename string, limit *int64, r io.Reade
 	if err != nil {
 		return 0, "", errors.New("failed to create attachment file")
 	}
-	defer f.Close()
+	defer func() {
+		if closeErr := f.Close(); closeErr != nil {
+			log.Printf("saveAttachmentToLocal: close attachment file failed: %v, local path: %s", closeErr, localPath)
+		}
+	}()
 	// +1 to detect if the attachment exceeds the limit
 	if limit != nil && *limit > 0 {
 		limited := io.LimitReader(r, *limit+1)

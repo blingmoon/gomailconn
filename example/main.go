@@ -32,7 +32,7 @@ func loadDotEnv() {
 		val := strings.TrimSpace(line[i+1:])
 		val = strings.Trim(val, `"'`)
 		if key != "" {
-			os.Setenv(key, val)
+			_ = os.Setenv(key, val)
 		}
 	}
 }
