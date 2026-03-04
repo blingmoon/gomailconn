@@ -200,14 +200,28 @@ func (c *Client) extractEmailBodyAndAttachments(bodyReader imap.LiteralReader) (
 // sanitizeFilename removes potentially dangerous characters from a filename
 // and returns a safe version for local filesystem storage.
 func sanitizeFilename(filename string) string {
-	// Get the base filename without path
 	base := filepath.Base(filename)
-
-	// Remove any directory traversal attempts
+	// Remove path separators and ".."
 	base = strings.ReplaceAll(base, "..", "")
 	base = strings.ReplaceAll(base, "/", "_")
 	base = strings.ReplaceAll(base, "\\", "_")
-
+	// Strip null and other control characters (0x00-0x1f, 0x7f)
+	base = strings.Map(func(r rune) rune {
+		if r == 0 || r == '/' || r == '\\' || r < 32 || r == 127 {
+			return -1
+		}
+		return r
+	}, base)
+	// Avoid reserved/all-dots names; empty will be replaced by caller with "attachment"
+	if strings.Trim(base, ".") == "" {
+		return ""
+	}
+	// Some filesystems limit filename length (e.g. 255 bytes)
+	const maxBaseLen = 200
+	if len(base) > maxBaseLen {
+		ext := filepath.Ext(base)
+		base = base[:maxBaseLen-len(ext)] + ext
+	}
 	return base
 }
 
