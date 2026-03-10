@@ -26,10 +26,11 @@ func (c *Client) extractEmailBodyAndAttachments(bodyReader imap.LiteralReader) (
 		bodyTotalRemainingSize       *int64
 		attachmentTotalRemainingSize *int64
 	)
-	if c.config.BodyMaxBytes > 0 {
-		copyBodyTotalRemainingSize := c.config.BodyMaxBytes
-		bodyTotalRemainingSize = &copyBodyTotalRemainingSize
+	bodyLimit := c.config.BodyMaxBytes
+	if bodyLimit <= 0 {
+		bodyLimit = DefaultBodyMaxBytes
 	}
+	bodyTotalRemainingSize = &bodyLimit
 	if c.config.AttachmentMaxBytes > 0 {
 		copyAttachmentTotalRemainingSize := c.config.AttachmentMaxBytes
 		attachmentTotalRemainingSize = &copyAttachmentTotalRemainingSize
@@ -37,7 +38,7 @@ func (c *Client) extractEmailBodyAndAttachments(bodyReader imap.LiteralReader) (
 	if bodyReader.Size() == 0 {
 		return nil, nil, errors.New("body reader size is 0")
 	}
-	if bodyTotalRemainingSize != nil && attachmentTotalRemainingSize != nil {
+	if attachmentTotalRemainingSize != nil {
 		if bodyReader.Size() > *bodyTotalRemainingSize+*attachmentTotalRemainingSize {
 			return nil, nil, errors.New("email body and attachment size exceeds limit")
 		}
@@ -63,6 +64,7 @@ func (c *Client) extractEmailBodyAndAttachments(bodyReader imap.LiteralReader) (
 			break
 		}
 		if err != nil {
+			log.Printf("extractEmailBodyAndAttachments: NextPart failed: %v", err)
 			continue
 		}
 
@@ -141,7 +143,7 @@ func (c *Client) extractEmailBodyAndAttachments(bodyReader imap.LiteralReader) (
 			}
 			continue
 		}
-		if bodyTotalRemainingSize != nil && *bodyTotalRemainingSize <= 0 {
+		if *bodyTotalRemainingSize <= 0 {
 			// if limit is 0, skip the body part
 			// discard the body part
 			_, _ = io.Copy(io.Discard, p.Body)
@@ -153,36 +155,33 @@ func (c *Client) extractEmailBodyAndAttachments(bodyReader imap.LiteralReader) (
 			})
 			continue
 		}
-		if bodyTotalRemainingSize != nil {
-			// if limit is set, read the body part with limit
-			limitedBody := io.LimitReader(p.Body, *bodyTotalRemainingSize+1)
-			body, err := io.ReadAll(limitedBody)
-			if err != nil || len(body) == 0 {
-				continue
-			}
-			if len(body) > int(*bodyTotalRemainingSize) {
-				bodyParts = append(bodyParts, &MailBodyPart{
-					ContentType: innerContentType,
-					Body:        "",
-					IsParsed:    false,
-					ParseError:  errors.New("body limit exceeded, skipping body part"),
-				})
-				// discard the body part
-				_, _ = io.Copy(io.Discard, p.Body)
-				continue
-			}
+		if *bodyTotalRemainingSize <= 0 {
+			// if limit is 0, skip the body part
+			// discard the body part
+			_, _ = io.Copy(io.Discard, p.Body)
 			bodyParts = append(bodyParts, &MailBodyPart{
 				ContentType: innerContentType,
-				Body:        string(body),
-				IsParsed:    true,
+				Body:        "",
+				IsParsed:    false,
+				ParseError:  errors.New("body limit exceeded, skipping body part"),
 			})
-			*bodyTotalRemainingSize = *bodyTotalRemainingSize - int64(len(body))
 			continue
 		}
-		// if limit is not set, read the body part without limit
-		// bodyTotalRemainingSize is nil, so we can read the body part without limit
-		body, err := io.ReadAll(p.Body)
+		// read the body part with limit (bodyTotalRemainingSize is always set)
+		limitedBody := io.LimitReader(p.Body, *bodyTotalRemainingSize+1)
+		body, err := io.ReadAll(limitedBody)
 		if err != nil || len(body) == 0 {
+			continue
+		}
+		if len(body) > int(*bodyTotalRemainingSize) {
+			bodyParts = append(bodyParts, &MailBodyPart{
+				ContentType: innerContentType,
+				Body:        "",
+				IsParsed:    false,
+				ParseError:  errors.New("body limit exceeded, skipping body part"),
+			})
+			// discard the body part
+			_, _ = io.Copy(io.Discard, p.Body)
 			continue
 		}
 		bodyParts = append(bodyParts, &MailBodyPart{
@@ -190,6 +189,8 @@ func (c *Client) extractEmailBodyAndAttachments(bodyReader imap.LiteralReader) (
 			Body:        string(body),
 			IsParsed:    true,
 		})
+		*bodyTotalRemainingSize = *bodyTotalRemainingSize - int64(len(body))
+		continue
 	}
 	return bodyParts, attachments, nil
 }

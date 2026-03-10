@@ -52,7 +52,7 @@ type Client struct {
 	// Using atomic.Int64 makes the pre-lock Load() race-free.
 	reconnectClientVersion atomic.Int64
 	reconnectMutex         sync.Mutex
-	Status                 ClientStatus
+	status                 ClientStatus
 	parserHandler          func(ctx context.Context, mailMessage *MailMessage) error
 
 	dealMailMessageCh chan *MailMessage
@@ -64,7 +64,7 @@ func NewClient(cfg *Config) (*Client, error) {
 	}
 	return &Client{
 		config: cfg,
-		Status: ClientStatusInit,
+		status: ClientStatusInit,
 	}, nil
 }
 
@@ -74,19 +74,22 @@ func (c *Client) StartWithHandler(ctx context.Context, handler func(ctx context.
 	}
 	runCtx, cancel := context.WithCancel(ctx)
 	c.mu.Lock()
-	if c.Status != ClientStatusInit {
+	if c.status != ClientStatusInit {
 		c.mu.Unlock()
 		// cancel the context
 		cancel()
 		return ErrAlreadyInitialized
 	}
 	// change status to initing, avoid duplicate start
-	c.Status = ClientStatusIniting
+	c.status = ClientStatusIniting
 	c.cancel = cancel
 	c.parserHandler = handler
 	c.idleUpdatesCh = make(chan struct{}, 1)
-	// channel for deal mail message
-	c.dealMailMessageCh = make(chan *MailMessage, 100)
+	queueSize := c.config.MailQueueSize
+	if queueSize <= 0 {
+		queueSize = DefaultMailQueueSize
+	}
+	c.dealMailMessageCh = make(chan *MailMessage, queueSize)
 	c.mu.Unlock()
 
 	// Channel for IDLE unilateral updates (new mail); connect() will set UnilateralDataHandler to send here.
@@ -96,7 +99,7 @@ func (c *Client) StartWithHandler(ctx context.Context, handler func(ctx context.
 	}
 	// change status to running
 	c.mu.Lock()
-	c.Status = ClientStatusRunning
+	c.status = ClientStatusRunning
 	c.mu.Unlock()
 
 	c.loopWg.Add(1)
@@ -145,7 +148,7 @@ func (c *Client) Stop(ctx context.Context) error {
 	c.loopWg.Wait() // wait for checkLoop goroutine to exit
 
 	c.mu.Lock()
-	c.Status = ClientStatusStopped
+	c.status = ClientStatusStopped
 	c.mu.Unlock()
 	return nil
 }
