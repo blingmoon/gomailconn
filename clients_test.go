@@ -31,8 +31,8 @@ func TestNewClient(t *testing.T) {
 		if client.config != cfg {
 			t.Fatal("client.config should be the same pointer as cfg")
 		}
-		if client.Status != ClientStatusInit {
-			t.Fatalf("client.Status = %q, want %q", client.Status, ClientStatusInit)
+		if client.status != ClientStatusInit {
+			t.Fatalf("client.Status = %q, want %q", client.status, ClientStatusInit)
 		}
 	})
 }

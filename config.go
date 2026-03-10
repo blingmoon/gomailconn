@@ -24,9 +24,11 @@ type Config struct {
 	// all attachments in the email will be saved to the attachment directory,
 	// if not configured, use no limit, 0 = use default
 	AttachmentMaxBytes int64 `json:"attachment_max_bytes"`
-	// max size per body part (text/plain, text/html) to avoid unbounded io.ReadAl,
-	// if not configured, use no limit, 0 = use default
+	// max size per body part (text/plain, text/html) to avoid unbounded io.ReadAll.
+	// if not configured (<=0), DefaultBodyMaxBytes (10MB) is used.
 	BodyMaxBytes int64 `json:"body_max_bytes"`
+	// mail message queue size for handler; if <=0, DefaultMailQueueSize (100) is used.
+	MailQueueSize int `json:"mail_queue_size"`
 
 	// SMTP send (optional, if not configured, Send is not available)
 	SMTPServer string `json:"smtp_server"`
@@ -34,3 +36,9 @@ type Config struct {
 	// 465  use true, 587  use false+STARTTLS
 	SMTPUseTLS bool `json:"smtp_use_tls"`
 }
+
+// Default limits when not set in Config.
+const (
+	DefaultBodyMaxBytes   int64 = 10 << 20 // 10MB
+	DefaultMailQueueSize int   = 100
+)

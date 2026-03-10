@@ -5,7 +5,7 @@
 A Go library for **IMAP/SMTP** email: connect to your mailbox, get notified when new mail arrives, and send mail. Built on [go-imap/v2](https://github.com/emersion/go-imap/v2).
 
 - **What it does:** Keeps a long-lived connection to an IMAP server, calls your handler for each new message (with parsed body and attachments), and optionally sends mail via SMTP.
-- **Who it’s for:** Services that need to watch a mailbox (e.g. QQ Mail, NetEase 163) or automate read/send without running a full mail client.
+- **Who it’s for:** Services that need to watch a mailbox (e.g. QQ Mail, NetEase 163) or automate read/send without running a full mail client; can be wired into an Agent as a message channel trigger.
 - **In one line:** Configure once, run `StartWithHandler`, and handle incoming mail in your code.
 
 ## Features
